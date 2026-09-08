@@ -8,6 +8,8 @@
   function textoSeguro(valor, limite) {
     return String(valor == null ? "" : valor)
       .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ")
+      .replace(/\b(token|pin|senha)\b\s*[:=]\s*["']?[^,\s"']+/gi, "$1=[REMOVIDO]")
+      .replace(/\b(?:55)?\d{10,11}\b/g, "[TELEFONE_REMOVIDO]")
       .replace(/[?#].*?(?=\s|$)/g, "")
       .replace(/\s+/g, " ")
       .trim()
