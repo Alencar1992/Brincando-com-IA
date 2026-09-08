@@ -2266,19 +2266,34 @@
         }
 
         function marcarItemEExtrasPronto(numeroPedido, idxPrincipal) {
-            travarSyncTemporariamente();
-            let p = historicoNuvem.find(x => x.numero == numeroPedido);
-            if(p) {
-                p.itens[idxPrincipal].pronto = true;
-                for (let i = idxPrincipal + 1; i < p.itens.length; i++) {
-                    if (p.itens[i].tipo === 'extra') { p.itens[i].pronto = true; } else if (p.itens[i].tipo !== 'bebida') { break; }
-                }
-                p.produzido = p.itens.filter(i => i.tipo !== 'bebida').every(i => i.pronto === true);
+            const p = historicoNuvem.find(x => x.numero == numeroPedido);
+            const indice = Number(idxPrincipal);
+            const itemAtual = p && Array.isArray(p.itens) && Number.isInteger(indice)
+                ? p.itens[indice]
+                : null;
 
-                if(typeof google !== 'undefined') google.script.run.atualizarVendaRealTime(JSON.stringify(p));
-                checarBaixaCache(p);
+            // A sincronização pode atualizar o pedido entre a renderização e o clique.
+            // Nesse caso, não grava dados incompletos e reconstrói a tela atual.
+            if (!itemAtual) {
+                console.warn('Item de produção desatualizado; ação ignorada com segurança.', {
+                    numeroPedido,
+                    idxPrincipal
+                });
+                mostrarToast('Pedido atualizado. Toque em Concluir novamente.');
                 atualizarTudo();
+                return;
             }
+
+            travarSyncTemporariamente();
+            itemAtual.pronto = true;
+            for (let i = indice + 1; i < p.itens.length; i++) {
+                if (p.itens[i].tipo === 'extra') { p.itens[i].pronto = true; } else if (p.itens[i].tipo !== 'bebida') { break; }
+            }
+            p.produzido = p.itens.filter(i => i.tipo !== 'bebida').every(i => i.pronto === true);
+
+            if(typeof google !== 'undefined') google.script.run.atualizarVendaRealTime(JSON.stringify(p));
+            checarBaixaCache(p);
+            atualizarTudo();
         }
 
         function renderizarPainelPedidos() {
