@@ -39,7 +39,7 @@ test('P14 preserva recursos ainda usados pelo painel administrativo', () => {
   assert.match(code, /function excluirContadorTapiocasHoje\s*\(/);
   assert.match(api, /"excluirContadorTapiocasHoje"/);
   assert.match(index, /\.excluirContadorTapiocasHoje\(dataHojeStr\)/);
-  assert.match(index, /src="\.\/investigador\.js"/);
+  assert.match(index, /src="\.\/investigador\.js(?:\?v=[^"]+)?"/);
   assert.match(index, /id="textoErroSistema"/);
   assert.match(investigador, /unhandledrejection/);
 });
