@@ -59,6 +59,7 @@ function executarAcaoApi_(action, args, token) {
     "obterCatalogoCardapio",
     "obterStatusCardapio",
     "registrarPedidoOnline",
+    "registrarFalhaSistema",
     "obterConfiguracaoOperacional",
     "loginAcesso",
     "loginAdministrador",
