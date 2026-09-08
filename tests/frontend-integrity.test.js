@@ -453,3 +453,55 @@ test("produção ignora com segurança item alterado pela sincronização", () =
   assert.deepEqual(eventos, ["aviso", "toast", "renderizar"]);
   assert.equal(sandbox.historicoNuvem[0].itens[0].pronto, false);
 });
+
+test("monitor central registra ação, protege dados e evita duplicidade", () => {
+  const investigador = fs.readFileSync(path.join(root, "frontend/investigador.js"), "utf8");
+  const apiClient = fs.readFileSync(path.join(root, "frontend/api-client.js"), "utf8");
+  const pdv = fs.readFileSync(path.join(root, "frontend/index.html"), "utf8");
+  const cliente = fs.readFileSync(path.join(root, "frontend/cliente.html"), "utf8");
+  const listeners = {};
+  const enviados = [];
+  const storage = new Map();
+  const runner = {
+    withFailureHandler() { return this; },
+    registrarFalhaSistema(payload) { enviados.push(JSON.parse(payload)); }
+  };
+  const sandbox = {
+    Date,
+    Error,
+    JSON,
+    Math,
+    URLSearchParams,
+    navigator: { userAgent: "Android Teste" },
+    document: { getElementById() { return null; } },
+    localStorage: {
+      getItem(chave) { return storage.get(chave) || null; },
+      setItem(chave, valor) { storage.set(chave, String(valor)); }
+    }
+  };
+  sandbox.window = {
+    location: { pathname: "/frontend/index.html", search: "", hash: "" },
+    crypto: { randomUUID() { return "cliente-teste"; } },
+    google: { script: { run: runner } },
+    addEventListener(nome, handler) { listeners[nome] = handler; }
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(investigador, sandbox);
+
+  const erro = new Error("token=segredo telefone 5511999999999");
+  erro.code = "SERVER_ERROR";
+  listeners["tapimovel:api-error"]({
+    detail: { action: "atualizarVendaRealTime", error: erro }
+  });
+  listeners["tapimovel:api-error"]({
+    detail: { action: "atualizarVendaRealTime", error: erro }
+  });
+
+  assert.equal(enviados.length, 1);
+  assert.equal(enviados[0].acao, "atualizarVendaRealTime");
+  assert.doesNotMatch(enviados[0].mensagem, /segredo|5511999999999/);
+  assert.match(apiClient, /tapimovel:api-error/);
+  assert.match(apiClient, /prop !== "registrarFalhaSistema"/);
+  assert.match(pdv, /investigador\.js\?v=20260908\.1/);
+  assert.match(cliente, /investigador\.js\?v=20260908\.1/);
+});
