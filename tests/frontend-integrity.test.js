@@ -423,3 +423,33 @@ const backend = fs.readdirSync(appsScriptDir)
   assert.match(backend, /function aceitarPedidoOnline/);
   assert.match(backend, /ORDER_ALREADY_PROCESSED/);
 });
+
+test("produção ignora com segurança item alterado pela sincronização", () => {
+  const html = fs.readFileSync(path.join(root, "frontend/index.html"), "utf8");
+  const inicio = html.indexOf("function marcarItemEExtrasPronto");
+  const fim = html.indexOf("function renderizarPainelPedidos", inicio);
+  assert.ok(inicio >= 0 && fim > inicio, "função de conclusão não encontrada");
+  const funcao = html.slice(inicio, fim);
+
+  const eventos = [];
+  const sandbox = {
+    historicoNuvem: [{
+      numero: 7,
+      itens: [{ tipo: "tapioca", pronto: false }],
+      produzido: false
+    }],
+    travarSyncTemporariamente: () => eventos.push("travar"),
+    mostrarToast: () => eventos.push("toast"),
+    atualizarTudo: () => eventos.push("renderizar"),
+    checarBaixaCache: () => eventos.push("baixar"),
+    console: { warn: () => eventos.push("aviso") }
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(funcao, sandbox);
+
+  assert.doesNotThrow(() => {
+    vm.runInContext("marcarItemEExtrasPronto('7', 3)", sandbox);
+  });
+  assert.deepEqual(eventos, ["aviso", "toast", "renderizar"]);
+  assert.equal(sandbox.historicoNuvem[0].itens[0].pronto, false);
+});
