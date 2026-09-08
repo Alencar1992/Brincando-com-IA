@@ -252,6 +252,14 @@
               return payload.data;
             })
             .catch(function (error) {
+              if (prop !== "registrarFalhaSistema") {
+                try {
+                  error.tapimovelAction = prop;
+                  window.dispatchEvent(new CustomEvent("tapimovel:api-error", {
+                    detail: { action: prop, error: error }
+                  }));
+                } catch (_) {}
+              }
               if (error && error.code === "AUTH_REQUIRED") {
                 emitAuthRequired(error.message);
               }
