@@ -9,7 +9,7 @@ function createContext() {
   const properties = new Map();
   const cache = new Map();
   let currentDay = "2026-07-28";
-  const lock = { waitLock() {}, releaseLock() {} };
+  const lock = { waitLock() {}, tryLock() { return true; }, hasLock() { return true; }, releaseLock() {} };
   class MemoryRange {
     constructor(sheet, row, col, rows, cols) {
       this.sheet = sheet;
@@ -392,6 +392,49 @@ test("fórmulas são neutralizadas antes da planilha", () => {
   const { context } = createContext();
   assert.equal(context.valorSeguroPlanilha_("=IMPORTXML(\"x\")"), "'=IMPORTXML(\"x\")");
   assert.equal(context.valorSeguroPlanilha_("observação normal"), "observação normal");
+});
+
+test("LOG_DEBUG registra falhas sanitizadas sem interromper a API", () => {
+  const { context } = createContext();
+  const payload = JSON.stringify({
+    clienteId: "aparelho-teste",
+    origem: "PDV",
+    tipo: "API",
+    tela: "/frontend/index.html",
+    acao: "atualizarVendaRealTime",
+    codigo: "SERVER_ERROR",
+    mensagem: "token=segredo telefone 5511999999999",
+    detalhe: "Error: timeout no LockService",
+    linha: "2272:46",
+    arquivo: "https://exemplo/index.html?v=segredo",
+    dispositivo: "Android Teste",
+    versao: "2026-09-08.1"
+  });
+
+  const resultado = context.registrarFalhaSistema(payload);
+  assert.equal(resultado.registrado, true);
+
+  const aba = context.SpreadsheetApp.getActiveSpreadsheet().getSheetByName("LOG_DEBUG");
+  assert.ok(aba);
+  assert.equal(aba.get(2, 3), "PDV");
+  assert.equal(aba.get(2, 6), "atualizarVendaRealTime");
+  assert.doesNotMatch(aba.get(2, 8), /segredo|5511999999999/);
+  assert.equal(aba.get(2, 9), "Error: timeout no LockService");
+  assert.equal(aba.get(2, 11), "https://exemplo/index.html");
+
+  const duplicado = context.registrarFalhaSistema(payload);
+  assert.equal(duplicado.registrado, false);
+  assert.equal(duplicado.motivo, "duplicado");
+
+  const viaApi = context.executarAcaoApi_("registrarFalhaSistema", [
+    JSON.stringify({
+      clienteId: "aparelho-teste",
+      origem: "CARDAPIO",
+      tipo: "NAVEGADOR",
+      mensagem: "falha pública controlada"
+    })
+  ], "");
+  assert.equal(viaApi.data.registrado, true);
 });
 
 test("pausas são zeradas no dia seguinte e mantidas no mesmo dia", () => {
