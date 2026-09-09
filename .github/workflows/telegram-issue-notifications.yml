@@ -4,11 +4,6 @@ on:
   issues:
     types:
       - opened
-  pull_request:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/telegram-issue-notifications.yml"
   workflow_dispatch:
 
 permissions:
@@ -16,7 +11,7 @@ permissions:
 
 jobs:
   testar-configuracao:
-    if: github.event_name != 'issues'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
