@@ -1,0 +1,100 @@
+name: Notificacoes Telegram - Issues
+
+on:
+  issues:
+    types:
+      - opened
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/telegram-issue-notifications.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  testar-configuracao:
+    if: github.event_name != 'issues'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Detectar conversa e enviar teste
+        shell: bash
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
+            echo "TELEGRAM_BOT_TOKEN ainda nao foi configurado." >&2
+            exit 1
+          fi
+
+          resposta="$(curl --silent --show-error --fail-with-body \
+            --retry 2 --max-time 15 \
+            --request POST \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates" \
+            --header "Content-Type: application/json" \
+            --data '{"allowed_updates":["message"]}')"
+
+          chat_id="$(jq -r '[.result[] | select(.message.chat.type == "private") | .message.chat.id] | last // empty' <<< "$resposta")"
+
+          if [ -z "$chat_id" ]; then
+            echo "Nenhuma conversa privada encontrada. Abra o bot no Telegram, toque em Iniciar e envie uma mensagem." >&2
+            exit 1
+          fi
+
+          echo "TELEGRAM_CHAT_ID detectado: $chat_id" >> "$GITHUB_STEP_SUMMARY"
+
+          payload="$(jq -n \
+            --arg chat_id "$chat_id" \
+            --arg text "✅ TAPIMOVEL conectado ao Telegram. As novas issues poderao gerar alertas aqui." \
+            '{chat_id: $chat_id, text: $text, disable_web_page_preview: true}')"
+
+          curl --silent --show-error --fail-with-body \
+            --retry 2 --max-time 15 \
+            --request POST \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --header "Content-Type: application/json" \
+            --data "$payload" > /dev/null
+
+  notificar-issue-aberta:
+    if: github.event_name == 'issues' && github.event.action == 'opened'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Enviar alerta ao Telegram
+        shell: bash
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+          ISSUE_LABELS: ${{ join(github.event.issue.labels.*.name, ', ') }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${TELEGRAM_BOT_TOKEN:-}" ] || [ -z "${TELEGRAM_CHAT_ID:-}" ]; then
+            echo "Configure TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID nos Secrets do repositorio." >&2
+            exit 1
+          fi
+
+          labels="${ISSUE_LABELS:-sem classificacao}"
+          texto="$(printf '🚨 Nova issue no TAPIMOVEL\n\n#%s — %s\nClassificacao: %s\nAberta por: %s\n\n%s' \
+            "$ISSUE_NUMBER" "$ISSUE_TITLE" "$labels" "$ISSUE_AUTHOR" "$ISSUE_URL")"
+
+          payload="$(jq -n \
+            --arg chat_id "$TELEGRAM_CHAT_ID" \
+            --arg text "$texto" \
+            '{chat_id: $chat_id, text: $text, disable_web_page_preview: true}')"
+
+          curl --silent --show-error --fail-with-body \
+            --retry 2 --max-time 15 \
+            --request POST \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --header "Content-Type: application/json" \
+            --data "$payload" > /dev/null
